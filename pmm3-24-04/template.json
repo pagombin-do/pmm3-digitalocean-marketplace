@@ -31,6 +31,11 @@
       "destination": "/var/"
     },
     {
+      "type": "file",
+      "source": "pmm3-24-04/pmm-do.py",
+      "destination": "/tmp/pmm-do.py"
+    },
+    {
       "type": "shell",
       "environment_vars": [
         "DEBIAN_FRONTEND=noninteractive",

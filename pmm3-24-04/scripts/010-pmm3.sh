@@ -205,4 +205,8 @@ The script will:
 
 EOF
 
+# Copy the DigitalOcean integration script to the root directory
+cp /tmp/pmm-do.py /root/pmm-do.py
+chmod +x /root/pmm-do.py
+
 echo "PMM3 installation completed." 
