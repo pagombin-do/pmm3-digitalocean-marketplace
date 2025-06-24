@@ -33,7 +33,7 @@ echo ""
 echo -e "PMM3 has been installed and is ready to use!"
 echo ""
 echo -e "${YELLOW}Access Information:${NC}"
-echo "  • Web Interface: http://$(curl -s ifconfig.me):80"
+echo "  • Web Interface: https://$(curl -s ifconfig.me):443"
 echo "  • Default Username: admin"
 echo "  • Default Password: admin"
 echo ""
@@ -66,6 +66,7 @@ echo ""
 echo -e "${YELLOW}Security Information:${NC}"
 echo "To keep this Droplet secure, the UFW firewall is enabled."
 echo "Ports 22 (SSH), 80 (HTTP), and 443 (HTTPS) are open."
+echo "PMM3 uses HTTPS by default for secure communication."
 echo -e "${RED}Recommendation:${NC} For improved security, consider:"
 echo "  • Restricting SSH access to your IP only"
 echo "  • Setting up SSL/TLS certificates"
@@ -129,7 +130,7 @@ Percona Monitoring and Management (PMM) is an open source database monitoring, m
 
 ## Getting Started
 
-1. Access the PMM3 web interface at: http://YOUR_SERVER_IP:80
+1. Access the PMM3 web interface at: https://YOUR_SERVER_IP:443
 2. Log in with the default credentials:
    - Username: admin
    - Password: admin

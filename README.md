@@ -163,7 +163,7 @@ Once the PMM3 image is approved and available in the Marketplace, users can depl
 1. Selecting "Percona Monitoring and Management 3" from the DigitalOcean Marketplace.
 2. Creating a Droplet based on the image (minimum 2GB RAM recommended).
 3. SSH'ing into the Droplet, where they'll see the welcome screen with access information.
-4. Accessing the PMM3 web interface at `http://YOUR_DROPLET_IP:80`
+4. Accessing the PMM3 web interface at `https://YOUR_DROPLET_IP:443`
 5. Logging in with default credentials (admin/admin) and changing the password immediately.
 6. Adding their databases for monitoring.
 
