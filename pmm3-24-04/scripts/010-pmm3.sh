@@ -54,6 +54,15 @@ echo "  2. Log in with admin/admin credentials"
 echo "  3. Change the default password in Settings"
 echo "  4. Add your databases for monitoring"
 echo ""
+echo -e "${YELLOW}DigitalOcean Database Integration:${NC}"
+echo "  For DigitalOcean Managed Database users:"
+echo "  • Run: python3 /root/pmm-do.py"
+echo "  • This script automatically discovers and adds your DigitalOcean databases"
+echo "  • You'll need your DigitalOcean API token (read-only permissions sufficient)"
+echo "  • Set environment variables to skip prompts:"
+echo "    export DIGITALOCEAN_API_TOKEN=your_token_here"
+echo "    export PMM_ADMIN_PASSWORD=your_pmm_password"
+echo ""
 echo -e "${YELLOW}Documentation:${NC}"
 echo "  • Official Docs: https://docs.percona.com/percona-monitoring-and-management/"
 echo "  • Getting Started: https://docs.percona.com/percona-monitoring-and-management/get-started/"
@@ -136,6 +145,30 @@ Percona Monitoring and Management (PMM) is an open source database monitoring, m
    - Password: admin
 3. **Important**: Change the default password immediately!
 4. Add your databases for monitoring
+
+## DigitalOcean Database Integration
+
+If you're using DigitalOcean Managed Databases, you can use the included script to automatically discover and add them to PMM:
+
+```bash
+python3 /root/pmm-do.py
+```
+
+### Prerequisites:
+- DigitalOcean API token (read-only permissions sufficient)
+- PMM admin password
+
+### Environment Variables (optional):
+```bash
+export DIGITALOCEAN_API_TOKEN=your_token_here
+export PMM_ADMIN_PASSWORD=your_pmm_password
+```
+
+The script will:
+- Discover all MySQL databases in your DigitalOcean account
+- Prompt you to select which ones to monitor
+- Automatically configure monitoring with optimal settings
+- Set up Query Analytics and performance monitoring
 
 ## Default Credentials
 
