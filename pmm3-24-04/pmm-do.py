@@ -2,14 +2,15 @@
 
 """
 This script adds DigitalOcean DBaaS instances to a Percona Monitoring and Management 
-(PMM) host running on the local server. Currently only MySQL DBaaS instances are supported.
+(PMM) host running on the local server. Supports MySQL, PostgreSQL, and MongoDB DBaaS instances.
 
 Updated for PMM v3 API:
-- Updated list services endpoint to use /v1/inventory/services (GET)
-- Service creation uses /v1/inventory/services with "pmm-server" as node_id
-- Updated payload format to use service type as top-level property (PMM v3 format)
+- Updated list services endpoint to use /v1/management/services (GET)
+- Service creation uses /v1/management/services with correct payload format
+- Updated payload format to match PMM v3 management API structure
 - Added Python 2/3 compatibility
 - Enhanced error handling for PMM v3 response format
+- Added support for PostgreSQL and MongoDB in addition to MySQL
 """
 
 from __future__ import print_function
@@ -37,8 +38,8 @@ class PmmServer:
     def listServices(self):
         requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
-        # Updated endpoint for PMM v3
-        endpoint = self.baseURL + "/v1/inventory/services"
+        # Updated endpoint for PMM v3 management API
+        endpoint = self.baseURL + "/v1/management/services"
         try:
             r = requests.get(endpoint, verify=False, auth=('admin', self.password))
             r.raise_for_status()
@@ -57,22 +58,36 @@ class PmmServer:
     
     def addMySQL(self, mysqlInstance):
         """
-        Given a dict representing a DBaaS MySQL instance, add it to PMM using PMM v3 API
+        Given a dict representing a DBaaS MySQL instance, add it to PMM using PMM v3 management API
         """
-        print("Adding instance {} to PMM...".format(mysqlInstance.name))
+        print("Adding MySQL instance {} to PMM...".format(mysqlInstance.name))
     
         mysqlInstance.createMonitoringUser()
         
         requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
-        # Use PMM v3 inventory API format for services with pmm-server as node_id
+        # Use PMM v3 management API format for services
         body = {
             "mysql": {
-                "service_name": mysqlInstance.name,
-                "node_id": "pmm-server",
+                "metricsParameters": "manually",
+                "schema": "https",
+                "pmm_agent_id": "pmm-server",
+                "port": str(mysqlInstance.port),
+                "qan_mysql_perfschema": True,
+                "disable_comments_parsing": True,
+                "tablestatOptions": "disabled",
+                "tablestats_group_table_limit": -1,
                 "address": mysqlInstance.address,
-                "port": mysqlInstance.port,
+                "username": mysqlInstance.monitoring_username,
+                "password": mysqlInstance.monitoring_password,
                 "environment": mysqlInstance.region,
+                "cluster": mysqlInstance.region,
+                "service_name": mysqlInstance.name,
+                "add_node": {
+                    "node_name": mysqlInstance.name + "-node",
+                    "node_type": "NODE_TYPE_REMOTE_NODE"
+                },
+                "metrics_mode": 1,
                 "custom_labels": {
                     "source": "digitalocean",
                     "region": mysqlInstance.region
@@ -80,8 +95,8 @@ class PmmServer:
             }
         }
         
-        # Use the inventory services endpoint in PMM v3
-        addURL = self.baseURL + "/v1/inventory/services"
+        # Use the management services endpoint in PMM v3
+        addURL = self.baseURL + "/v1/management/services"
         try:
             r = requests.post(addURL, json=body, verify=False, auth=('admin', self.password))
             r.raise_for_status()
@@ -95,6 +110,111 @@ class PmmServer:
                 print("Error adding service '{}': {}".format(mysqlInstance.name, jsonResponse.get('message', 'Unknown error')))
         except Exception as err:
             print("Error adding service '{}': {}".format(mysqlInstance.name, err))
+    
+        return
+
+    def addPostgreSQL(self, pgInstance):
+        """
+        Given a dict representing a DBaaS PostgreSQL instance, add it to PMM using PMM v3 management API
+        """
+        print("Adding PostgreSQL instance {} to PMM...".format(pgInstance.name))
+    
+        pgInstance.createMonitoringUser()
+        
+        requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+        # Use PMM v3 management API format for PostgreSQL services
+        body = {
+            "postgresql": {
+                "metricsParameters": "manually",
+                "schema": "https",
+                "pmm_agent_id": "pmm-server",
+                "port": str(pgInstance.port),
+                "disable_comments_parsing": True,
+                "autoDiscoveryOptions": "enabled",
+                "autoDiscoveryLimit": 10,
+                "maxConnectionLimitOptions": "disabled",
+                "maxExporterConnections": None,
+                "address": pgInstance.address,
+                "username": pgInstance.monitoring_username,
+                "password": pgInstance.monitoring_password,
+                "qan_postgresql_pgstatmonitor_agent": True,
+                "service_name": pgInstance.name,
+                "add_node": {
+                    "node_name": pgInstance.name + "-node",
+                    "node_type": "NODE_TYPE_REMOTE_NODE"
+                },
+                "metrics_mode": 1
+            }
+        }
+        
+        # Use the management services endpoint in PMM v3
+        addURL = self.baseURL + "/v1/management/services"
+        try:
+            r = requests.post(addURL, json=body, verify=False, auth=('admin', self.password))
+            r.raise_for_status()
+            print("Successfully added {} to PMM".format(pgInstance.name))
+        except requests.exceptions.HTTPError:
+            jsonResponse = r.json()
+            if r.status_code == 409:
+                # Service already exists
+                print("Service '{}' already exists: {}".format(pgInstance.name, jsonResponse.get('message', 'Conflict')))
+            else:
+                print("Error adding service '{}': {}".format(pgInstance.name, jsonResponse.get('message', 'Unknown error')))
+        except Exception as err:
+            print("Error adding service '{}': {}".format(pgInstance.name, err))
+    
+        return
+
+    def addMongoDB(self, mongoInstance):
+        """
+        Given a dict representing a DBaaS MongoDB instance, add it to PMM using PMM v3 management API
+        """
+        print("Adding MongoDB instance {} to PMM...".format(mongoInstance.name))
+    
+        mongoInstance.createMonitoringUser()
+        
+        requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+        # Use PMM v3 management API format for MongoDB services
+        body = {
+            "mongodb": {
+                "metricsParameters": "manually",
+                "schema": "https",
+                "pmm_agent_id": "pmm-server",
+                "port": str(mongoInstance.port),
+                "address": mongoInstance.address,
+                "username": mongoInstance.monitoring_username,
+                "password": mongoInstance.monitoring_password,
+                "environment": mongoInstance.region,
+                "custom_labels": {
+                    "source": "digitalocean",
+                    "region": mongoInstance.region
+                },
+                "service_name": mongoInstance.name,
+                "add_node": {
+                    "node_name": mongoInstance.name + "-node",
+                    "node_type": "NODE_TYPE_REMOTE_NODE"
+                },
+                "metrics_mode": 1
+            }
+        }
+        
+        # Use the management services endpoint in PMM v3
+        addURL = self.baseURL + "/v1/management/services"
+        try:
+            r = requests.post(addURL, json=body, verify=False, auth=('admin', self.password))
+            r.raise_for_status()
+            print("Successfully added {} to PMM".format(mongoInstance.name))
+        except requests.exceptions.HTTPError:
+            jsonResponse = r.json()
+            if r.status_code == 409:
+                # Service already exists
+                print("Service '{}' already exists: {}".format(mongoInstance.name, jsonResponse.get('message', 'Conflict')))
+            else:
+                print("Error adding service '{}': {}".format(mongoInstance.name, jsonResponse.get('message', 'Unknown error')))
+        except Exception as err:
+            print("Error adding service '{}': {}".format(mongoInstance.name, err))
     
         return
 
@@ -123,15 +243,37 @@ class DbaasInstance:
     
     def instanceMonitored(self, pmmServer):
         """
-        Return boolean based on if an instance is monitored according to PMM API
+        Return boolean based on if an instance is monitored according to PMM management API
         """
         services = pmmServer.listServices()
         try:
-            # Updated for PMM v3 response structure
-            mysqlServices = services.get('mysql', [])
-        except (KeyError, AttributeError):
-            mysqlServices = []
-        if (self.address, self.port) in [ (i.get('address'), i.get('port')) for i in mysqlServices]:
+            # Updated for PMM v3 management API response structure
+            # The management API typically returns services in a different format
+            # We need to check if our instance exists in the response
+            dbServices = []
+            
+            # Check for different database types
+            for db_type in ['mysql', 'postgresql', 'mongodb']:
+                if db_type in services:
+                    if isinstance(services[db_type], list):
+                        dbServices.extend(services[db_type])
+                    else:
+                        dbServices.append(services[db_type])
+            
+            # Check if services are nested under a 'services' key
+            if 'services' in services:
+                dbServices.extend([s for s in services['services'] if s.get('service_type') in ['mysql', 'postgresql', 'mongodb']])
+            
+            # Fallback: search through all top-level values that might be lists
+            if not dbServices:
+                for key, value in services.items():
+                    if isinstance(value, list):
+                        dbServices.extend([s for s in value if isinstance(s, dict) and 
+                                         any(db in str(s).lower() for db in ['mysql', 'postgresql', 'mongodb'])])
+        except (KeyError, AttributeError, TypeError):
+            dbServices = []
+        
+        if (self.address, self.port) in [ (i.get('address'), i.get('port')) for i in dbServices]:
             return True
         else:
             return False
@@ -215,7 +357,7 @@ def printBanner():
     print(
 """
 # This script adds DigitalOcean DBaaS instances to a Percona Monitoring and Management 
-# (PMM) host running on the local server. Currently only MySQL DBaaS instances are supported.
+# (PMM) host running on the local server. Supports MySQL, PostgreSQL, and MongoDB DBaaS instances.
 # 
 # Before attempting to add DBaaS instances, make sure you have logged in to the Percona 
 # Monitoring and Management GUI and set an admin password using this URL:
@@ -244,7 +386,7 @@ def main(arguments):
     pmm = PmmServer(serverAdminPassword=pmm_admin_password)
     
     instanceProperties = getDBInstances(digitalocean_api_token)
-    eligibleInstances = [ DbaasInstance(i, pmm) for i in instanceProperties if i['engine'] in ['mysql']]
+    eligibleInstances = [ DbaasInstance(i, pmm) for i in instanceProperties if i['engine'] in ['mysql', 'pg', 'mongodb']]
     selectedInstances = promptForDBSelection(eligibleInstances)
     for instance in selectedInstances:
         if instance.monitored:
@@ -252,6 +394,10 @@ def main(arguments):
             continue
         if instance.engine == 'mysql':
             pmm.addMySQL(instance)
+        elif instance.engine == 'pg':
+            pmm.addPostgreSQL(instance)
+        elif instance.engine == 'mongodb':
+            pmm.addMongoDB(instance)
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))
