@@ -56,13 +56,15 @@ class PmmServer:
     
         return r.json()
     
-    def addMySQL(self, mysqlInstance):
+    def addMySQL(self, mysqlInstance, digitalocean_api_token=None):
         """
         Given a dict representing a DBaaS MySQL instance, add it to PMM using PMM v3 management API
         """
         print("Adding MySQL instance {} to PMM...".format(mysqlInstance.name))
     
-        mysqlInstance.createMonitoringUser()
+        if not mysqlInstance.createMonitoringUser(digitalocean_api_token):
+            print("Failed to create monitoring user for MySQL instance {}. Skipping...".format(mysqlInstance.name))
+            return
         
         requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
@@ -113,13 +115,15 @@ class PmmServer:
     
         return
 
-    def addPostgreSQL(self, pgInstance):
+    def addPostgreSQL(self, pgInstance, digitalocean_api_token=None):
         """
         Given a dict representing a DBaaS PostgreSQL instance, add it to PMM using PMM v3 management API
         """
         print("Adding PostgreSQL instance {} to PMM...".format(pgInstance.name))
     
-        pgInstance.createMonitoringUser()
+        if not pgInstance.createMonitoringUser(digitalocean_api_token):
+            print("Failed to create monitoring user for PostgreSQL instance {}. Skipping...".format(pgInstance.name))
+            return
         
         requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
@@ -166,13 +170,15 @@ class PmmServer:
     
         return
 
-    def addMongoDB(self, mongoInstance):
+    def addMongoDB(self, mongoInstance, digitalocean_api_token=None):
         """
         Given a dict representing a DBaaS MongoDB instance, add it to PMM using PMM v3 management API
         """
         print("Adding MongoDB instance {} to PMM...".format(mongoInstance.name))
     
-        mongoInstance.createMonitoringUser()
+        if not mongoInstance.createMonitoringUser(digitalocean_api_token):
+            print("Failed to create monitoring user for MongoDB instance {}. Skipping...".format(mongoInstance.name))
+            return
         
         requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
@@ -222,11 +228,13 @@ class DbaasInstance:
 
     def __init__(self, instanceAttributes, pmmServer):
         self.name = instanceAttributes['name']
+        self.id = instanceAttributes['id']  # Store the database ID for API calls
         self.region = instanceAttributes['region']
         self.address = instanceAttributes['connection']['host']
         self.port = instanceAttributes['private_connection']['port']
         self.admin_username = instanceAttributes['private_connection']['user']
-        self.admin_password = instanceAttributes['private_connection']['password']
+        # Handle cases where password might not be in private_connection (e.g., MongoDB)
+        self.admin_password = instanceAttributes['private_connection'].get('password') or instanceAttributes['connection'].get('password', '')
         self.engine = instanceAttributes['engine']
         self.monitored = self.instanceMonitored(pmmServer)
 
@@ -236,10 +244,195 @@ class DbaasInstance:
                     for n in range(32)])
         return password
     
-    def createMonitoringUser(self):
+    def createMonitoringUser(self, digitalocean_api_token=None):
+        if digitalocean_api_token:
+            if self.engine == 'mongodb':
+                return self.createMongoDBUser(digitalocean_api_token)
+            elif self.engine == 'mysql':
+                return self.createMySQLUser(digitalocean_api_token)
+            elif self.engine == 'pg':
+                return self.createPostgreSQLUser(digitalocean_api_token)
+        
+        # Fallback to local credentials if no API token
         self.monitoring_username = 'pmm'
         self.monitoring_password = self.generatePassword()
-        return
+        return True
+    
+    def createMongoDBUser(self, digitalocean_api_token):
+        """
+        Create a MongoDB monitoring user via DigitalOcean API
+        """
+        try:
+            user_input = input('Do you want to create a monitoring user for MongoDB instance "{}"? [y/N]: '.format(self.name))
+        except (KeyboardInterrupt, EOFError):
+            print('')
+            return False
+        
+        if user_input.lower() not in ['y', 'yes']:
+            print('Skipping MongoDB user creation. You will need to create a monitoring user manually.')
+            return False
+        
+        auth_header = {"Authorization": "Bearer {}".format(digitalocean_api_token)}
+        
+        # Create monitoring user payload
+        user_payload = {
+            "name": "pmm_monitor",
+            "settings": {
+                "mongo_user_settings": {
+                    "role": "read"  # Read-only access for monitoring
+                }
+            }
+        }
+        
+        try:
+            print('Creating MongoDB monitoring user for "{}"...'.format(self.name))
+            r = requests.post(
+                'https://api.digitalocean.com/v2/databases/{}/users'.format(self.id),
+                headers=auth_header,
+                json=user_payload
+            )
+            r.raise_for_status()
+            
+            user_response = r.json()
+            created_user = user_response['user']
+            
+            self.monitoring_username = created_user['name']
+            self.monitoring_password = created_user['password']
+            
+            print('Successfully created MongoDB monitoring user "{}" for instance "{}"'.format(
+                self.monitoring_username, self.name))
+            return True
+            
+        except requests.exceptions.HTTPError as e:
+            print('Error creating MongoDB user for "{}": HTTP {}'.format(self.name, r.status_code))
+            if r.status_code == 409:
+                print('User may already exist. You can use existing monitoring credentials.')
+            else:
+                try:
+                    error_response = r.json()
+                    print('Error details: {}'.format(error_response.get('message', 'Unknown error')))
+                except:
+                    print('Error details: {}'.format(r.text))
+            return False
+        except Exception as err:
+            print('Error creating MongoDB user for "{}": {}'.format(self.name, err))
+            return False
+    
+    def createMySQLUser(self, digitalocean_api_token):
+        """
+        Create a MySQL monitoring user via DigitalOcean API
+        """
+        try:
+            user_input = input('Do you want to create a monitoring user for MySQL instance "{}"? [y/N]: '.format(self.name))
+        except (KeyboardInterrupt, EOFError):
+            print('')
+            return False
+        
+        if user_input.lower() not in ['y', 'yes']:
+            print('Skipping MySQL user creation. You will need to create a monitoring user manually.')
+            return False
+        
+        auth_header = {"Authorization": "Bearer {}".format(digitalocean_api_token)}
+        
+        # Create monitoring user payload for MySQL
+        user_payload = {
+            "name": "pmm_monitor",
+            "mysql_settings": {
+                "auth_plugin": "mysql_native_password"
+            }
+        }
+        
+        try:
+            print('Creating MySQL monitoring user for "{}"...'.format(self.name))
+            r = requests.post(
+                'https://api.digitalocean.com/v2/databases/{}/users'.format(self.id),
+                headers=auth_header,
+                json=user_payload
+            )
+            r.raise_for_status()
+            
+            user_response = r.json()
+            created_user = user_response['user']
+            
+            self.monitoring_username = created_user['name']
+            self.monitoring_password = created_user['password']
+            
+            print('Successfully created MySQL monitoring user "{}" for instance "{}"'.format(
+                self.monitoring_username, self.name))
+            print('Note: You may need to grant additional monitoring privileges to this user manually.')
+            return True
+            
+        except requests.exceptions.HTTPError as e:
+            print('Error creating MySQL user for "{}": HTTP {}'.format(self.name, r.status_code))
+            if r.status_code == 409:
+                print('User may already exist. You can use existing monitoring credentials.')
+            else:
+                try:
+                    error_response = r.json()
+                    print('Error details: {}'.format(error_response.get('message', 'Unknown error')))
+                except:
+                    print('Error details: {}'.format(r.text))
+            return False
+        except Exception as err:
+            print('Error creating MySQL user for "{}": {}'.format(self.name, err))
+            return False
+    
+    def createPostgreSQLUser(self, digitalocean_api_token):
+        """
+        Create a PostgreSQL monitoring user via DigitalOcean API
+        """
+        try:
+            user_input = input('Do you want to create a monitoring user for PostgreSQL instance "{}"? [y/N]: '.format(self.name))
+        except (KeyboardInterrupt, EOFError):
+            print('')
+            return False
+        
+        if user_input.lower() not in ['y', 'yes']:
+            print('Skipping PostgreSQL user creation. You will need to create a monitoring user manually.')
+            return False
+        
+        auth_header = {"Authorization": "Bearer {}".format(digitalocean_api_token)}
+        
+        # Create monitoring user payload for PostgreSQL
+        user_payload = {
+            "name": "pmm_monitor"
+            # PostgreSQL users don't typically need special settings for basic monitoring
+        }
+        
+        try:
+            print('Creating PostgreSQL monitoring user for "{}"...'.format(self.name))
+            r = requests.post(
+                'https://api.digitalocean.com/v2/databases/{}/users'.format(self.id),
+                headers=auth_header,
+                json=user_payload
+            )
+            r.raise_for_status()
+            
+            user_response = r.json()
+            created_user = user_response['user']
+            
+            self.monitoring_username = created_user['name']
+            self.monitoring_password = created_user['password']
+            
+            print('Successfully created PostgreSQL monitoring user "{}" for instance "{}"'.format(
+                self.monitoring_username, self.name))
+            print('Note: You may need to grant additional monitoring privileges to this user manually.')
+            return True
+            
+        except requests.exceptions.HTTPError as e:
+            print('Error creating PostgreSQL user for "{}": HTTP {}'.format(self.name, r.status_code))
+            if r.status_code == 409:
+                print('User may already exist. You can use existing monitoring credentials.')
+            else:
+                try:
+                    error_response = r.json()
+                    print('Error details: {}'.format(error_response.get('message', 'Unknown error')))
+                except:
+                    print('Error details: {}'.format(r.text))
+            return False
+        except Exception as err:
+            print('Error creating PostgreSQL user for "{}": {}'.format(self.name, err))
+            return False
     
     def instanceMonitored(self, pmmServer):
         """
@@ -386,18 +579,14 @@ def main(arguments):
     pmm = PmmServer(serverAdminPassword=pmm_admin_password)
     
     instanceProperties = getDBInstances(digitalocean_api_token)
-    eligibleInstances = [ DbaasInstance(i, pmm) for i in instanceProperties if i['engine'] in ['mysql', 'pg', 'mongodb']]
+    eligibleInstances = [ DbaasInstance(i, pmm) for i in instanceProperties if i['engine'] == 'mysql']
     selectedInstances = promptForDBSelection(eligibleInstances)
     for instance in selectedInstances:
         if instance.monitored:
             print('Instance "{}" is already monitored by PMM.'.format(instance.name))
             continue
-        if instance.engine == 'mysql':
-            pmm.addMySQL(instance)
-        elif instance.engine == 'pg':
-            pmm.addPostgreSQL(instance)
-        elif instance.engine == 'mongodb':
-            pmm.addMongoDB(instance)
+        # Only MySQL instances will be in the list now
+        pmm.addMySQL(instance, digitalocean_api_token)
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))
