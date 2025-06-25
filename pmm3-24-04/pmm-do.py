@@ -6,9 +6,7 @@ This script adds DigitalOcean DBaaS instances to a Percona Monitoring and Manage
 
 Updated for PMM v3 API:
 - Updated list services endpoint to use /v1/inventory/services (GET)
-- Updated to use PMM v3 two-step process: create node first, then service
-- Node creation uses /v1/inventory/nodes with 'remote' node type
-- Service creation uses /v1/inventory/services with node_id reference
+- Service creation uses /v1/inventory/services with "pmm-server" as node_id
 - Updated payload format to use service type as top-level property (PMM v3 format)
 - Added Python 2/3 compatibility
 - Enhanced error handling for PMM v3 response format
@@ -57,65 +55,6 @@ class PmmServer:
     
         return r.json()
     
-    def addNode(self, mysqlInstance):
-        """
-        Add a node for the MySQL instance using PMM v3 unified nodes API
-        """
-        requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-        
-        node_body = {
-            "remote": {
-                "node_name": mysqlInstance.name,
-                "address": mysqlInstance.address,
-                "region": mysqlInstance.region
-            }
-        }
-        
-        endpoint = self.baseURL + "/v1/inventory/nodes"
-        try:
-            r = requests.post(endpoint, json=node_body, verify=False, auth=('admin', self.password))
-            r.raise_for_status()
-            response = r.json()
-            # Return the node_id from the response
-            if 'remote' in response:
-                return response['remote']['node_id']
-            else:
-                print("Unexpected response format when adding node")
-                return None
-        except requests.exceptions.HTTPError:
-            jsonResponse = r.json()
-            if r.status_code == 409:
-                # Node already exists, try to find it
-                print("Node already exists, attempting to find existing node...")
-                return self.findExistingNode(mysqlInstance.name)
-            else:
-                print("Error adding node: {}".format(jsonResponse.get('message', 'Unknown error')))
-                return None
-        except Exception as err:
-            print("Error adding node: {}".format(err))
-            return None
-    
-    def findExistingNode(self, node_name):
-        """
-        Find an existing node by name
-        """
-        try:
-            endpoint = self.baseURL + "/v1/inventory/nodes"
-            r = requests.get(endpoint, verify=False, auth=('admin', self.password))
-            r.raise_for_status()
-            nodes = r.json()
-            
-            # Look for the node in different node types
-            for node_type in ['generic', 'container', 'remote']:
-                if node_type in nodes:
-                    for node in nodes[node_type]:
-                        if node.get('node_name') == node_name:
-                            return node.get('node_id')
-            return None
-        except Exception as err:
-            print("Error finding existing node: {}".format(err))
-            return None
-
     def addMySQL(self, mysqlInstance):
         """
         Given a dict representing a DBaaS MySQL instance, add it to PMM using PMM v3 API
@@ -124,19 +63,13 @@ class PmmServer:
     
         mysqlInstance.createMonitoringUser()
         
-        # First, create the node
-        node_id = self.addNode(mysqlInstance)
-        if not node_id:
-            print("Failed to add or find node for instance {}".format(mysqlInstance.name))
-            return
-        
         requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
-        # Use PMM v3 inventory API format for services
+        # Use PMM v3 inventory API format for services with pmm-server as node_id
         body = {
             "mysql": {
                 "service_name": mysqlInstance.name,
-                "node_id": node_id,
+                "node_id": "pmm-server",
                 "address": mysqlInstance.address,
                 "port": mysqlInstance.port,
                 "environment": mysqlInstance.region,
