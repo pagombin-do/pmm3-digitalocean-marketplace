@@ -580,14 +580,17 @@ def main(arguments):
     pmm = PmmServer(serverAdminPassword=pmm_admin_password)
     
     instanceProperties = getDBInstances(digitalocean_api_token)
-    eligibleInstances = [ DbaasInstance(i, pmm) for i in instanceProperties if i['engine'] == 'mysql']
+    eligibleInstances = [ DbaasInstance(i, pmm) for i in instanceProperties if i['engine'] in ['mysql', 'pg']]
     selectedInstances = promptForDBSelection(eligibleInstances)
     for instance in selectedInstances:
         if instance.monitored:
             print('Instance "{}" is already monitored by PMM.'.format(instance.name))
             continue
-        # Only MySQL instances will be in the list now
-        pmm.addMySQL(instance, digitalocean_api_token)
+        # Add instance based on engine type
+        if instance.engine == 'mysql':
+            pmm.addMySQL(instance, digitalocean_api_token)
+        elif instance.engine == 'pg':
+            pmm.addPostgreSQL(instance, digitalocean_api_token)
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))
