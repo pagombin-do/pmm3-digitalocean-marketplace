@@ -142,7 +142,8 @@ class PmmServer:
                 "address": pgInstance.address,
                 "username": pgInstance.monitoring_username,
                 "password": pgInstance.monitoring_password,
-                "qan_postgresql_pgstatmonitor_agent": True,
+                "tls": True,
+                "tls_skip_verify": True,
                 "service_name": pgInstance.name,
                 "add_node": {
                     "node_name": pgInstance.name + "-node",
