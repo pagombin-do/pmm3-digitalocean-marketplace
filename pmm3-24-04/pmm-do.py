@@ -140,6 +140,7 @@ class PmmServer:
                 "maxConnectionLimitOptions": "disabled",
                 "maxExporterConnections": None,
                 "address": pgInstance.address,
+                "database": "defaultdb",
                 "username": pgInstance.monitoring_username,
                 "password": pgInstance.monitoring_password,
                 "tls": True,
