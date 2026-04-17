@@ -36,6 +36,11 @@
       "destination": "/tmp/pmm-do.py"
     },
     {
+      "type": "file",
+      "source": "pmm3-24-04/pmm-integration/",
+      "destination": "/tmp/pmm-integration"
+    },
+    {
       "type": "shell",
       "environment_vars": [
         "DEBIAN_FRONTEND=noninteractive",
@@ -64,9 +69,10 @@
         "common/scripts/010-docker.sh",
         "pmm3-24-04/scripts/010-pmm3.sh",
         "pmm3-24-04/scripts/020-firewall.sh",
+        "pmm3-24-04/scripts/030-pmm-integration.sh",
         "common/scripts/020-application-tag.sh",
         "common/scripts/900-cleanup.sh"
       ]
     }
   ]
-} 
+}
