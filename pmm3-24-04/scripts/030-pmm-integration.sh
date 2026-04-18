@@ -39,6 +39,16 @@ apt-get update -qq
 apt-get install -y -qq python3 python3-pip python3-venv openssl > /dev/null 2>&1
 ok "System dependencies installed."
 
+# Install pmm-admin CLI (needed by the integration app to register databases)
+info "Installing PMM client (pmm-admin)..."
+wget -qO /tmp/percona-release.deb https://repo.percona.com/apt/percona-release_latest.generic_all.deb
+dpkg -i /tmp/percona-release.deb
+percona-release enable pmm3-client
+apt-get update -qq
+apt-get install -y -qq pmm-client > /dev/null 2>&1
+rm -f /tmp/percona-release.deb
+ok "PMM client installed."
+
 # Firewall — open the HTTPS port
 if command -v ufw >/dev/null 2>&1; then
     if ufw status 2>/dev/null | grep -q "Status: active"; then
